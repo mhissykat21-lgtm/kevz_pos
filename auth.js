@@ -8,7 +8,7 @@ const WARN_SECONDS = 60;
 // FIX: login.html hint showed admin/admin123 but USERS had admin/050720.
 //      Unified to admin/admin123 so the demo hint actually works.
 const USERS = [
-  { username: 'admin',   password: 'admin123', role: 'Admin',   display: 'Administrator' },
+  { username: 'admin',   password: '050720', role: 'Admin',   display: 'Administrator' },
   { username: 'cashier', password: 'pos2024',  role: 'Cashier', display: 'Cashier'       },
 ];
 
