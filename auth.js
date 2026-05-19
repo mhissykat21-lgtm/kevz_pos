@@ -9,7 +9,7 @@ const WARN_SECONDS = 60;
 //      Unified to admin/admin123 so the demo hint actually works.
 const USERS = [
   { username: 'admin',   password: '050720', role: 'Admin',   display: 'Administrator' },
-  { username: 'cashier', password: 'pos2024',  role: 'Cashier', display: 'Cashier'       },
+  { username: 'cashier', password: '964480',  role: 'Cashier', display: 'Cashier'       },
 ];
 
 // ── SESSION ──────────────────────────────────────────────────────────────────
