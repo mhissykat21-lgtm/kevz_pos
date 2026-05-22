@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // ─── WILCY POS — supabase.js (FIXED) ─────────────────────────────────────────
 //
 // FIXES APPLIED:
@@ -21,6 +22,46 @@ const SUPABASE_KEY = window.WILCY_SUPABASE_KEY || '';
 //      which meant USE_SUPABASE was always false even with real credentials.
 const PLACEHOLDER_URL = 'https://YOUR_PROJECT_ID.supabase.co';
 const USE_SUPABASE = SUPABASE_URL !== PLACEHOLDER_URL && SUPABASE_URL.includes('supabase.co');
+=======
+// ─── WILCY POS — supabase.js ─────────────────────────────────────────────────
+// Supabase as the database backend.
+//
+// SETUP (one-time):
+// 1. Go to https://supabase.com and create a new project.
+// 2. In the SQL Editor, run the schema below to create your tables.
+// 3. Copy your Project URL and anon/public key into the config below.
+//
+// ── SQL SCHEMA (run once in Supabase → SQL Editor) ───────────────────────────
+//
+
+//
+//   -- Enable Row Level Security (recommended)
+//   alter table inventory enable row level security;
+//   alter table sales enable row level security;
+//
+//   -- Allow all operations with the anon key (for this app's use-case)
+//   create policy "Allow all on inventory" on inventory for all using (true) with check (true);
+//   create policy "Allow all on sales"     on sales     for all using (true) with check (true);
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── CONFIG — replace these with your own values ──────────────────────────────
+// FIX 1: SUPABASE_URL was 'https://YOUR_PROJECT_ID.supabase.co' (placeholder).
+//         Set it to your real project URL.
+// FIX 2: SUPABASE_KEY had a trailing semicolon INSIDE the string — removed.
+// FIX 3: USE_SUPABASE was comparing against the wrong string (REST path),
+//         so Supabase was NEVER activated. Fixed to compare against the placeholder.
+
+const SUPABASE_URL = 'https://uqicigxxfgtxxrlyuygm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxaWNpZ3h4Zmd0eHhybHl1eWdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjA4OTAsImV4cCI6MjA5MzIzNjg5MH0.6VGStCwF0K9zMLlTcgqpdLHTkUP7bEIZtY-wo8wx6o8';
+
+// FIX 3: Was comparing to the full REST URL path — now correctly detects
+//        whether the URL is still the placeholder so USE_SUPABASE is true
+//        when real credentials are set.
+const USE_SUPABASE = SUPABASE_URL !== 'https://uqicigxxfgtxxrlyuygm.supabase.cohttps://uqicigxxfgtxxrlyuygm.supabase.co';
+
+// ─────────────────────────────────────────────────────────────────────────────
+>>>>>>> e451ba8e1c54e7892479738285632818a4d724ec
 
 // ── LOCAL STORAGE ────────────────────────────────────────────────────────────
 
@@ -29,12 +70,21 @@ const PENDING_KEY = 'wilcy_pending_sales_v1';
 
 const DEFAULT_DATA = {
   items: [
+<<<<<<< HEAD
     { id: 'demo001', name: 'Wireless Earbuds',       sku: 'WE-001', qty: 25, origPrice: 450,  price: 799,  threshold: 5, soldByKilo: false },
     { id: 'demo002', name: 'USB-C Hub 7-in-1',       sku: 'UC-007', qty: 4,  origPrice: 620,  price: 950,  threshold: 5, soldByKilo: false },
     { id: 'demo003', name: 'Mechanical Keyboard',    sku: 'MK-104', qty: 0,  origPrice: 1200, price: 1850, threshold: 3, soldByKilo: false },
     { id: 'demo004', name: 'Phone Stand Adjustable', sku: 'PS-ADJ', qty: 18, origPrice: 85,   price: 149,  threshold: 5, soldByKilo: false },
   ],
   sales: [],
+=======
+    { id: 'demo001', name: 'Wireless Earbuds',       sku: 'WE-001', qty: 25, origPrice: 450,  price: 799,  threshold: 5,  soldByKilo: false },
+    { id: 'demo002', name: 'USB-C Hub 7-in-1',       sku: 'UC-007', qty: 4,  origPrice: 620,  price: 950,  threshold: 5,  soldByKilo: false },
+    { id: 'demo003', name: 'Mechanical Keyboard',    sku: 'MK-104', qty: 0,  origPrice: 1200, price: 1850, threshold: 3,  soldByKilo: false },
+    { id: 'demo004', name: 'Phone Stand Adjustable', sku: 'PS-ADJ', qty: 18, origPrice: 85,   price: 149,  threshold: 5,  soldByKilo: false }
+  ],
+  sales: []
+>>>>>>> e451ba8e1c54e7892479738285632818a4d724ec
 };
 
 function loadLocal() {
@@ -54,6 +104,7 @@ function saveLocal() {
 
 function rowToItem(row) {
   return {
+<<<<<<< HEAD
     id:         row.id,
     name:       row.name,
     sku:        row.sku,
@@ -62,6 +113,16 @@ function rowToItem(row) {
     price:      Number(row.price),
     threshold:  Number(row.threshold) || 5,
     soldByKilo: !!row.sold_by_kilo,
+=======
+    id:          row.id,
+    name:        row.name,
+    sku:         row.sku,
+    qty:         Number(row.qty),
+    origPrice:   Number(row.orig_price),
+    price:       Number(row.price),
+    threshold:   Number(row.threshold) || 5,
+    soldByKilo:  !!row.sold_by_kilo,
+>>>>>>> e451ba8e1c54e7892479738285632818a4d724ec
   };
 }
 
@@ -80,6 +141,7 @@ function itemToRow(item) {
 
 function rowToSale(row) {
   return {
+<<<<<<< HEAD
     id:         row.id,
     itemId:     row.item_id,
     itemName:   row.item_name,
@@ -95,6 +157,23 @@ function rowToSale(row) {
     date:       row.date     || '',
     time:       row.time     || '',
     txnId:      row.txn_id   || '',
+=======
+    id:          row.id,
+    itemId:      row.item_id,
+    itemName:    row.item_name,
+    sku:         row.sku,
+    qty:         Number(row.qty),
+    soldByKilo:  !!row.sold_by_kilo,
+    pricePerPc:  Number(row.price_per_pc),
+    origPrice:   Number(row.orig_price),
+    revenue:     Number(row.revenue),
+    total:       Number(row.total),
+    customer:    row.customer || 'Walk-in',
+    payment:     row.payment  || 'Cash',
+    date:        row.date     || '',
+    time:        row.time     || '',
+    txnId:       row.txn_id   || '',
+>>>>>>> e451ba8e1c54e7892479738285632818a4d724ec
   };
 }
 
@@ -315,12 +394,23 @@ function setSyncStatus(state) {
   const el = document.getElementById('syncStatus');
   if (!el) return;
   const states = {
+<<<<<<< HEAD
     live:    { cls: 'sync-live',    icon: '●', text: 'Supabase'                 },
     syncing: { cls: 'sync-syncing', icon: '↻', text: 'Syncing…'                 },
     offline: { cls: 'sync-offline', icon: '⚠', text: 'Supabase offline — local' },
     local:   { cls: 'sync-local',   icon: '◉', text: 'Local mode'               },
+=======
+    live:    { cls: 'sync-live',    icon: '●', text: 'Supabase'                  },
+    syncing: { cls: 'sync-syncing', icon: '↻', text: 'Syncing…'                  },
+    offline: { cls: 'sync-offline', icon: '⚠', text: 'Supabase offline — local'  },
+    local:   { cls: 'sync-local',   icon: '◉', text: 'Local mode'                },
+>>>>>>> e451ba8e1c54e7892479738285632818a4d724ec
   };
   const s = states[state] || states.local;
   el.className = `sync-badge ${s.cls}`;
   el.innerHTML = `<span>${s.icon}</span> ${s.text}`;
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> e451ba8e1c54e7892479738285632818a4d724ec
