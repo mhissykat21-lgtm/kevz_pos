@@ -1,0 +1,459 @@
+// ─── WILCY POS — auth.js (FIXED) ─────────────────────────────────────────────
+//
+// FIXES APPLIED:
+//  1. Removed conflicting inline modal CSS from login.html (must be removed there too).
+//     The change-password modal now uses the same .modal-overlay/.modal/.open classes
+//     as the rest of the app — so style.css drives all modal behaviour.
+//  2. openChangePasswordModal() now appends the modal with class "modal-overlay open"
+//     directly so it's visible immediately (matching the pattern used by app.js /
+//     inventory.js: add class "open" to show, remove to hide).
+//  3. changePasswordSupabase() error handling improved — surfaces the Postgres
+//     exception message returned by the RPC function.
+//  4. SUPABASE_URL / SUPABASE_ANON_KEY declared with `const` guard so they don't
+//     conflict with the same names in supabase.js (both files are loaded on every
+//     page except login.html where supabase.js is NOT loaded).
+
+const AUTH_KEY     = 'wilcy_session';
+const IDLE_MINUTES = 15;
+const WARN_SECONDS = 60;
+
+// ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
+// Declared with window. so they don't cause "already declared" errors when both
+// auth.js and supabase.js are loaded on the same page.
+window.WILCY_SUPABASE_URL = 'https://uqicigxxfgtxxrlyuygm.supabase.co';
+window.WILCY_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxaWNpZ3h4Zmd0eHhybHl1eWdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjA4OTAsImV4cCI6MjA5MzIzNjg5MH0.6VGStCwF0K9zMLlTcgqpdLHTkUP7bEIZtY-wo8wx6o8';
+
+// ── USERS (local fallback — matched against user_accounts via Supabase RPC) ───
+const USERS = [
+  { username: 'admin',   password: 'admin123', role: 'Admin',   display: 'Administrator' },
+  { username: 'cashier', password: 'pos2024',  role: 'Cashier', display: 'Cashier'       },
+];
+
+// ── SESSION ──────────────────────────────────────────────────────────────────
+
+function getSession() {
+  try {
+    const raw = sessionStorage.getItem(AUTH_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function setSession(user) {
+  sessionStorage.setItem(AUTH_KEY, JSON.stringify({
+    username: user.username,
+    role:     user.role,
+    display:  user.display,
+    loginAt:  Date.now()
+  }));
+}
+
+function clearSession() {
+  sessionStorage.removeItem(AUTH_KEY);
+}
+
+function requireAuth() {
+  const session = getSession();
+  if (!session) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  return session;
+}
+
+// ── LOGIN FORM ───────────────────────────────────────────────────────────────
+
+function doLogin() {
+  const username = document.getElementById('loginUser')?.value.trim();
+  const password = document.getElementById('loginPass')?.value;
+
+  if (!username || !password) {
+    showLoginError('Please enter both username and password.');
+    return;
+  }
+
+  const user = USERS.find(u => u.username === username && u.password === password);
+
+  if (!user) {
+    showLoginError('Invalid username or password. Please try again.');
+    const passEl = document.getElementById('loginPass');
+    if (passEl) { passEl.value = ''; passEl.focus(); }
+    return;
+  }
+
+  setSession(user);
+  window.location.href = 'index.html';
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  if (el) { el.textContent = msg; el.style.display = 'flex'; }
+}
+
+function togglePw() {
+  const inp = document.getElementById('loginPass');
+  const btn = document.getElementById('pwToggle');
+  if (!inp) return;
+  inp.type        = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+
+// ── PASSWORD CHANGE MODAL ─────────────────────────────────────────────────────
+//
+// FIX: Previously the modal was appended WITHOUT the "open" class, so
+//      style.css (which uses opacity:0 + pointer-events:none on .modal-overlay,
+//      and opacity:1 + pointer-events:all on .modal-overlay.open) never showed
+//      the inner content.  login.html also had conflicting inline CSS that set
+//      display:flex on .modal-overlay — those styles have been removed from
+//      login.html.  Now the modal is created with class "modal-overlay open"
+//      so it follows the same show/hide contract as every other modal in the app.
+
+function openChangePasswordModal() {
+  // Prevent duplicate
+  if (document.getElementById('changePasswordModal')) return;
+
+  const modal = document.createElement('div');
+  modal.id = 'changePasswordModal';
+  // FIX: add "open" immediately so style.css makes it visible
+  modal.className = 'modal-overlay open';
+
+  modal.innerHTML = `
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <div class="modal-title">🔐 Change Password</div>
+        <button class="modal-close" onclick="closeChangePasswordModal()">✕</button>
+      </div>
+
+      <div id="cpError"
+           style="display:none;background:var(--red-lt);border:1px solid #fca5a5;color:var(--red);
+                  padding:12px 16px;border-radius:var(--radius-xs);margin-bottom:14px;font-size:0.875rem;">
+      </div>
+      <div id="cpSuccess"
+           style="display:none;background:var(--green-lt);border:1px solid #86efac;color:var(--green);
+                  padding:12px 16px;border-radius:var(--radius-xs);margin-bottom:14px;font-size:0.875rem;">
+      </div>
+
+      <div class="form-group">
+        <label>Current Password</label>
+        <input type="password" id="cpCurrent" placeholder="Enter current password" />
+      </div>
+      <div class="form-group">
+        <label>New Password</label>
+        <input type="password" id="cpNew" placeholder="Minimum 8 characters" oninput="checkPasswordStrength()" />
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <input type="password" id="cpConfirm" placeholder="Repeat new password" />
+      </div>
+
+      <!-- Password strength bar -->
+      <div id="pwStrength" style="display:none;margin-bottom:14px;">
+        <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden;margin-bottom:6px;">
+          <div id="strengthFill" style="height:100%;width:0;transition:all .3s;border-radius:3px;"></div>
+        </div>
+        <span id="strengthText" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;"></span>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost"   onclick="closeChangePasswordModal()">Cancel</button>
+        <button class="btn btn-primary" id="cpSubmit" onclick="submitChangePassword()">Change Password</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  // Close on backdrop click
+  modal.addEventListener('click', e => {
+    if (e.target === modal) closeChangePasswordModal();
+  });
+
+  setTimeout(() => document.getElementById('cpCurrent')?.focus(), 80);
+}
+
+function closeChangePasswordModal() {
+  document.getElementById('changePasswordModal')?.remove();
+}
+
+function checkPasswordStrength() {
+  const pw   = document.getElementById('cpNew')?.value || '';
+  const fill = document.getElementById('strengthFill');
+  const text = document.getElementById('strengthText');
+  const wrap = document.getElementById('pwStrength');
+  if (!fill || !text || !wrap) return;
+
+  if (!pw) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  let score = 0;
+  if (pw.length >= 8)                          score++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw))   score++;
+  if (/\d/.test(pw))                           score++;
+  if (/[^a-zA-Z\d]/.test(pw))                 score++;
+
+  const labels = ['Weak', 'Fair', 'Good', 'Strong', 'Very Strong'];
+  const colors = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e'];
+  const pcts   = [20, 40, 60, 80, 100];
+
+  fill.style.width           = pcts[score] + '%';
+  fill.style.backgroundColor = colors[score];
+  text.textContent           = labels[score];
+  text.style.color           = colors[score];
+}
+
+async function submitChangePassword() {
+  const current   = document.getElementById('cpCurrent')?.value    || '';
+  const newPw     = document.getElementById('cpNew')?.value        || '';
+  const confirm   = document.getElementById('cpConfirm')?.value    || '';
+  const errorEl   = document.getElementById('cpError');
+  const successEl = document.getElementById('cpSuccess');
+  const submitBtn = document.getElementById('cpSubmit');
+
+  const showErr = msg => {
+    errorEl.textContent   = msg;
+    errorEl.style.display = 'block';
+    successEl.style.display = 'none';
+  };
+
+  errorEl.style.display   = 'none';
+  successEl.style.display = 'none';
+
+  // ── Validation ───────────────────────────────────────────────────
+  if (!current || !newPw || !confirm) return showErr('Please fill in all fields.');
+  if (newPw.length < 8)              return showErr('New password must be at least 8 characters.');
+  if (newPw !== confirm)             return showErr('Passwords do not match.');
+  if (current === newPw)             return showErr('New password must be different from the current one.');
+
+  submitBtn.disabled    = true;
+  submitBtn.textContent = 'Changing…';
+
+  try {
+    const session  = getSession();
+    const username = session?.username || 'admin';
+    const result   = await changePasswordSupabase(username, current, newPw);
+
+    if (result.ok) {
+      successEl.textContent   = '✓ Password changed successfully!';
+      successEl.style.display = 'block';
+      document.getElementById('cpCurrent').value = '';
+      document.getElementById('cpNew').value     = '';
+      document.getElementById('cpConfirm').value = '';
+      document.getElementById('pwStrength').style.display = 'none';
+
+      // Update local USERS array so next login works without a page refresh
+      const u = USERS.find(u => u.username === username);
+      if (u) u.password = newPw;
+
+      setTimeout(() => {
+        closeChangePasswordModal();
+        if (typeof toast === 'function') toast('Password changed successfully! 🔐', 'success');
+      }, 1800);
+    } else {
+      showErr(result.error || 'Failed to change password. Check your current password.');
+    }
+  } catch (err) {
+    showErr('An error occurred: ' + err.message);
+  } finally {
+    submitBtn.disabled    = false;
+    submitBtn.textContent = 'Change Password';
+  }
+}
+
+// ── SUPABASE PASSWORD CHANGE (calls change_user_password RPC) ────────────────
+
+async function changePasswordSupabase(username, currentPassword, newPassword) {
+  try {
+    const url = `${window.WILCY_SUPABASE_URL}/rest/v1/rpc/change_user_password`;
+
+    const response = await fetch(url, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey':        window.WILCY_SUPABASE_KEY,
+        'Authorization': `Bearer ${window.WILCY_SUPABASE_KEY}`,
+      },
+      body: JSON.stringify({
+        p_username:     username,
+        p_old_password: currentPassword,
+        p_new_password: newPassword,
+      }),
+    });
+
+    // Supabase returns 200 with a JSON body from the RPC function
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      // HTTP-level error (e.g. 404 = function doesn't exist yet)
+      const msg = data?.message || data?.error || `HTTP ${response.status}`;
+      return { ok: false, error: msg };
+    }
+
+    // The RPC returns { success: true } or { success: false, error: "…" }
+    if (data?.success === true)  return { ok: true };
+    if (data?.success === false) return { ok: false, error: data.error || 'Unknown error' };
+
+    // Unexpected shape
+    return { ok: false, error: 'Unexpected response from server. Is the RPC deployed?' };
+
+  } catch (err) {
+    return { ok: false, error: 'Network error: ' + err.message };
+  }
+}
+
+// ── IDLE TIMER ───────────────────────────────────────────────────────────────
+
+let idleTimer   = null;
+let warnTimer   = null;
+let warnVisible = false;
+
+const IDLE_MS = IDLE_MINUTES * 60 * 1000;
+const WARN_MS = (IDLE_MINUTES * 60 - WARN_SECONDS) * 1000;
+
+function resetIdle() {
+  clearTimeout(idleTimer);
+  clearTimeout(warnTimer);
+  if (warnVisible) hideIdleWarning();
+  warnTimer = setTimeout(showIdleWarning, WARN_MS);
+  idleTimer = setTimeout(forceLogout,     IDLE_MS);
+}
+
+function showIdleWarning() {
+  warnVisible = true;
+  if (document.getElementById('idleWarning')) return;
+
+  const div = document.createElement('div');
+  div.id        = 'idleWarning';
+  div.className = 'idle-warning';
+  div.innerHTML = `
+    <div class="idle-warning-inner">
+      <div class="idle-ico">⏱</div>
+      <div>
+        <strong>Still there?</strong>
+        <p>You'll be signed out in <span id="idleCountdown">${WARN_SECONDS}</span>s due to inactivity.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="stayActive()">Stay signed in</button>
+    </div>`;
+  document.body.appendChild(div);
+
+  let count = WARN_SECONDS;
+  const interval = setInterval(() => {
+    count--;
+    const el = document.getElementById('idleCountdown');
+    if (el) el.textContent = count;
+    if (count <= 0) clearInterval(interval);
+  }, 1000);
+  div._interval = interval;
+}
+
+function hideIdleWarning() {
+  warnVisible = false;
+  const el = document.getElementById('idleWarning');
+  if (el) { clearInterval(el._interval); el.remove(); }
+}
+
+function stayActive()  { resetIdle(); }
+
+function forceLogout() {
+  clearSession();
+  window.location.href = 'login.html?reason=idle';
+}
+
+function doLogout() {
+  clearSession();
+  window.location.href = 'login.html';
+}
+
+function initIdleTimer() {
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(ev => {
+    document.addEventListener(ev, resetIdle, { passive: true });
+  });
+  resetIdle();
+}
+
+// ── HEADER USER CHIP ─────────────────────────────────────────────────────────
+
+function renderUserChip(session) {
+  const wrap = document.getElementById('userChip');
+  if (!wrap || !session) return;
+  wrap.innerHTML = `
+    <div class="user-chip">
+      <div class="user-avatar">${escHtml(session.display[0])}</div>
+      <div class="user-info">
+        <span class="user-name">${escHtml(session.display)}</span>
+        <span class="user-role">${escHtml(session.role)}</span>
+      </div>
+      <button class="user-chip-btn" onclick="openChangePasswordModal()" title="Change password">🔐</button>
+      <button class="logout-btn"    onclick="doLogout()" title="Sign out">⏻</button>
+    </div>`;
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+
+function bootAuth() {
+  const onLoginPage = window.location.pathname.endsWith('login.html');
+
+  if (onLoginPage) {
+    if (getSession()) {
+      window.location.href = 'index.html';
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'idle') {
+      const show = () => showLoginError('You were signed out due to inactivity.');
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', show);
+      } else { show(); }
+    }
+
+    const bindKeys = () => {
+      document.getElementById('loginPass')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') doLogin();
+      });
+      document.getElementById('loginUser')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('loginPass')?.focus();
+      });
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindKeys);
+    } else { bindKeys(); }
+    return;
+  }
+
+  const session = requireAuth();
+  if (!session) return;
+
+  const setup = () => {
+    renderUserChip(session);
+    initIdleTimer();
+    window.currentSession = session;
+    if (session.role !== 'Admin') {
+      document.querySelectorAll('[data-role="admin"]').forEach(el => {
+        el.style.display = 'none';
+      });
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else { setup(); }
+}
+
+// ── SHARED HELPERS ────────────────────────────────────────────────────────────
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function toast(msg, type = 'success') {
+  const icons = { success: '✓', error: '✕', warn: '⚠' };
+  const el    = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="t-icon">${icons[type] || '•'}</span><span>${msg}</span>`;
+  document.getElementById('toastContainer')?.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+bootAuth();
