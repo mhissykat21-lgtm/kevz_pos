@@ -54,18 +54,6 @@ async function init() {
 function renderAll() {
   renderTable();
   renderLowStockAlert();
-  populateCategoryFilter();
-}
-
-// ── CATEGORY FILTER DROPDOWN ──────────────────────────────────────────────────
-
-function populateCategoryFilter() {
-  const sel = document.getElementById('categoryFilter');
-  if (!sel) return;
-  const current = sel.value;
-  const cats = [...new Set(db.items.map(i => i.category || '').filter(Boolean))].sort();
-  sel.innerHTML = `<option value="all">All Categories</option>` +
-    cats.map(c => `<option value="${escHtml(c)}"${current === c ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
 }
 
 // ── LOW STOCK ALERT ───────────────────────────────────────────────────────────
@@ -88,11 +76,10 @@ function renderLowStockAlert() {
 // ── INVENTORY TABLE (paginated) ───────────────────────────────────────────────
 
 function renderTable(resetPage = false) {
-  const q        = (document.getElementById('searchInput')?.value || '').toLowerCase();
-  const filter   = document.getElementById('stockFilter')?.value || 'all';
-  const catFilter = document.getElementById('categoryFilter')?.value || 'all';
-  const body     = document.getElementById('inventoryBody');
-  const pagBar   = document.getElementById('invPaginationBar');
+  const q      = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  const filter = document.getElementById('stockFilter')?.value || 'all';
+  const body   = document.getElementById('inventoryBody');
+  const pagBar = document.getElementById('invPaginationBar');
   if (!body) return;
 
   let filtered = db.items.filter(i =>
@@ -101,7 +88,6 @@ function renderTable(resetPage = false) {
   if (filter === 'out') filtered = filtered.filter(i => i.qty === 0);
   else if (filter === 'low') filtered = filtered.filter(i => i.qty > 0 && i.qty <= (i.threshold || 5));
   else if (filter === 'ok')  filtered = filtered.filter(i => i.qty > (i.threshold || 5));
-  if (catFilter !== 'all') filtered = filtered.filter(i => (i.category || '') === catFilter);
 
   if (resetPage) invPage = 1;
 
@@ -134,14 +120,10 @@ function renderTable(resetPage = false) {
     const bestBadge = isBest ? '<span class="badge badge-best">🏆 Best</span>' : '';
     const qtyDisplay = item.soldByKilo ? Number(item.qty).toFixed(2) + ' kg' : item.qty;
 
-    const catBadge = item.category
-      ? `<span style="background:var(--accent-lt);color:var(--accent);font-size:0.68rem;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:4px;">${escHtml(item.category)}</span>`
-      : '';
-
     return `<tr>
       <td>
         <div class="td-sku">${escHtml(item.sku)}</div>
-        <div class="td-name">${escHtml(item.name)}${item.soldByKilo ? ' <span style="background:var(--accent-lt);color:var(--accent);font-size:0.68rem;font-weight:600;padding:1px 5px;border-radius:4px;margin-left:4px;">⚖ kg</span>' : ''}${catBadge}${bestBadge}${badge}</div>
+        <div class="td-name">${escHtml(item.name)}${item.soldByKilo ? ' <span style="background:var(--accent-lt);color:var(--accent);font-size:0.68rem;font-weight:600;padding:1px 5px;border-radius:4px;margin-left:4px;">⚖ kg</span>' : ''}${bestBadge}${badge}</div>
       </td>
       <td><span class="${qtyClass}">${qtyDisplay}</span></td>
       <td class="td-mono">${fmt(item.origPrice)}</td>
@@ -192,13 +174,11 @@ function renderTable(resetPage = false) {
 function goToInvPage(p) {
   const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
   const f = document.getElementById('stockFilter')?.value || 'all';
-  const catFilter = document.getElementById('categoryFilter')?.value || 'all';
   const filtered = db.items.filter(i => {
     if (!(i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q))) return false;
     if (f === 'out') return i.qty === 0;
     if (f === 'low') return i.qty > 0 && i.qty <= (i.threshold || 5);
     if (f === 'ok')  return i.qty > (i.threshold || 5);
-    if (catFilter !== 'all' && (i.category || '') !== catFilter) return false;
     return true;
   });
   const totalPages = Math.max(1, Math.ceil(filtered.length / INV_PAGE_SIZE));
@@ -211,19 +191,11 @@ function goToInvPage(p) {
 function openAddModal() {
   editingId = null;
   setText('modalTitle', 'Add New Item');
-  ['mName', 'mSku', 'mQty', 'mOrigPrice', 'mPrice', 'mThreshold', 'mCategory'].forEach(id => setVal(id, ''));
+  ['mName', 'mSku', 'mQty', 'mOrigPrice', 'mMargin', 'mPrice', 'mThreshold'].forEach(id => setVal(id, ''));
   const cb = document.getElementById('mSoldByKilo');
   if (cb) cb.checked = false;
-  _populateCategoryDatalist();
   openModal('itemModal');
   setTimeout(() => document.getElementById('mName')?.focus(), 120);
-}
-
-function _populateCategoryDatalist() {
-  const dl = document.getElementById('categoryList');
-  if (!dl) return;
-  const cats = [...new Set(db.items.map(i => i.category || '').filter(Boolean))].sort();
-  dl.innerHTML = cats.map(c => `<option value="${escHtml(c)}">`).join('');
 }
 
 function openEditModal(id) {
@@ -237,8 +209,11 @@ function openEditModal(id) {
   setVal('mOrigPrice', item.origPrice);
   setVal('mPrice',     item.price);
   setVal('mThreshold', item.threshold || 5);
-  setVal('mCategory',  item.category || '');
-  _populateCategoryDatalist();
+  // Populate margin % from existing prices
+  const margin = item.origPrice > 0
+    ? (((item.price - item.origPrice) / item.origPrice) * 100).toFixed(2)
+    : '';
+  setVal('mMargin', margin);
   const cb = document.getElementById('mSoldByKilo');
   if (cb) cb.checked = !!item.soldByKilo;
   openModal('itemModal');
@@ -247,7 +222,6 @@ function openEditModal(id) {
 async function saveItem() {
   const name       = document.getElementById('mName')?.value.trim()  || '';
   const sku        = document.getElementById('mSku')?.value.trim()   || '';
-  const category   = document.getElementById('mCategory')?.value.trim() || '';
   const soldByKilo = document.getElementById('mSoldByKilo')?.checked || false;
   // FIX: support decimal qty for kilo items
   const qty        = soldByKilo
@@ -267,7 +241,7 @@ async function saveItem() {
   if (editingId) {
     const idx = db.items.findIndex(i => i.id === editingId);
     if (idx > -1) {
-      db.items[idx] = { ...db.items[idx], name, sku, qty, origPrice, price, threshold, soldByKilo, category };
+      db.items[idx] = { ...db.items[idx], name, sku, qty, origPrice, price, threshold, soldByKilo };
       savedItem = db.items[idx];
     }
     toast(`"${name}" updated successfully!`, 'success');
@@ -275,7 +249,7 @@ async function saveItem() {
     if (db.items.some(i => i.sku.toLowerCase() === sku.toLowerCase())) {
       return toast('SKU already exists. Please use a unique SKU.', 'error');
     }
-    savedItem = { id: genId(), name, sku, qty, origPrice, price, threshold, soldByKilo, category };
+    savedItem = { id: genId(), name, sku, qty, origPrice, price, threshold, soldByKilo };
     db.items.push(savedItem);
     toast(`"${name}" added to inventory!`, 'success');
   }
@@ -393,17 +367,34 @@ function bindEvents() {
   });
 
   document.getElementById('searchInput')?.addEventListener('input', () => renderTable(true));
-  document.getElementById('categoryFilter')?.addEventListener('change', () => renderTable(true));
 
-  // FIX: original formula added 3 to the raw value which made no sense for
-  //      any price. Now suggests a 20% markup over original price instead.
-  document.getElementById('mOrigPrice')?.addEventListener('input', e => {
-    const v = parseFloat(e.target.value);
-    if (!isNaN(v) && v >= 0) {
-      const suggested = Math.ceil(v * 1.2); // 20% markup, rounded up
-      setVal('mPrice', suggested);
+  // ── Margin / Price two-way live binding ──────────────────────────────────
+  // Rules:
+  //   • Changing Orig Price  → recalculate Price using current Margin %
+  //   • Changing Margin %    → recalculate Price from Orig × (1 + margin/100)
+  //   • Changing Price       → back-calculate Margin % from Orig Price
+
+  function recalcPrice() {
+    const orig   = parseFloat(document.getElementById('mOrigPrice')?.value);
+    const margin = parseFloat(document.getElementById('mMargin')?.value);
+    if (!isNaN(orig) && orig >= 0 && !isNaN(margin) && margin >= 0) {
+      const srp = +(orig * (1 + margin / 100)).toFixed(2);
+      setVal('mPrice', srp);
     }
-  });
+  }
+
+  function recalcMargin() {
+    const orig  = parseFloat(document.getElementById('mOrigPrice')?.value);
+    const price = parseFloat(document.getElementById('mPrice')?.value);
+    if (!isNaN(orig) && orig > 0 && !isNaN(price) && price >= 0) {
+      const pct = (((price - orig) / orig) * 100).toFixed(2);
+      setVal('mMargin', pct);
+    }
+  }
+
+  document.getElementById('mOrigPrice')?.addEventListener('input', recalcPrice);
+  document.getElementById('mMargin')?.addEventListener('input', recalcPrice);
+  document.getElementById('mPrice')?.addEventListener('input', recalcMargin);
 
   document.getElementById('restockQty')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') confirmRestock();

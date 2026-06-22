@@ -77,9 +77,7 @@ function renderItemSearch(query) {
 
   let matches = q
     ? db.items.filter(i =>
-        i.name.toLowerCase().includes(q) ||
-        i.sku.toLowerCase().includes(q) ||
-        (i.category || '').toLowerCase().includes(q)
+        i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q)
       )
     : db.items.slice(0, 20);
 
@@ -102,7 +100,7 @@ function renderItemSearch(query) {
 
     return `<div class="item-result-row${isOut ? ' disabled' : ''}" onclick="addItemToCartById('${item.id}')">
       <div class="ir-left">
-        <div class="ir-name">${escHtml(item.name)}${item.soldByKilo ? ' <span style="font-size:0.7rem;background:var(--accent-lt);color:var(--accent);padding:1px 5px;border-radius:4px;margin-left:4px;">⚖ kg</span>' : ''}${item.category ? ` <span style="font-size:0.7rem;background:var(--surface2);color:var(--text3);padding:1px 5px;border-radius:4px;margin-left:4px;">${escHtml(item.category)}</span>` : ''}</div>
+        <div class="ir-name">${escHtml(item.name)}${item.soldByKilo ? ' <span style="font-size:0.7rem;background:var(--accent-lt);color:var(--accent);padding:1px 5px;border-radius:4px;margin-left:4px;">⚖ kg</span>' : ''}</div>
         <div class="ir-sku">${escHtml(item.sku)}</div>
       </div>
       <div class="ir-right">
@@ -270,22 +268,13 @@ function renderCart() {
 
 function onPaymentChange() {
   const method = document.getElementById('sellPayment')?.value;
-  const row = document.getElementById('billChangeRow');
-
+  const row    = document.getElementById('billChangeRow');
   if (!row) return;
-
   if (method === 'Cash') {
     row.style.display = 'grid';
-
-    const billEl = document.getElementById('billAmount');
-    if (!billEl || billEl.value.trim() === '') {
-      return; // Stop here if billAmount is empty
-    }
-
     calcChange();
   } else {
     row.style.display = 'none';
-
     const billEl = document.getElementById('billAmount');
     if (billEl) billEl.value = '';
   }
@@ -320,18 +309,6 @@ async function processCartSale() {
   const now      = new Date();
   const date     = now.toISOString().slice(0, 10);
   const time     = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const billEl  = document.getElementById('billAmount');
-  const billVal = billEl ? parseFloat(billEl.value) : NaN;
-  const subtotal = cart.reduce((a, c) => a + (c.qty * c.price), 0);
-
-  if (payment === 'Cash') {
-    if (!billEl || billEl.value.trim() === '' || isNaN(billVal) || billVal <= 0) {
-      return toast('Please enter the bill amount.', 'error');
-    }
-    if (billVal < subtotal) {
-      return toast(`Bill amount is short by ${fmt(subtotal - billVal)}.`, 'error');
-    }
-  }
 
   // Validate stock
   for (const c of cart) {
@@ -340,8 +317,6 @@ async function processCartSale() {
     const unitLabel = c.soldByKilo ? 'kg' : 'unit(s)';
     if (c.qty > item.qty) return toast(`Only ${item.soldByKilo ? item.qty.toFixed(2) + ' kg' : item.qty} ${unitLabel} left for "${escHtml(c.name)}".`, 'error');
   }
-
-   
 
   // Build sale records
   const newSales = cart.map(c => {

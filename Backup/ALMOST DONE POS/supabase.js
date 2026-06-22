@@ -50,10 +50,14 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 //         so Supabase was NEVER activated. Fixed to compare against the placeholder.
 
 
-// FIX 3: Was comparing to the full REST URL path — now correctly detects
-//        whether the URL is still the placeholder so USE_SUPABASE is true
-//        when real credentials are set.
-const USE_SUPABASE = SUPABASE_URL !== 'https://uqicigxxfgtxxrlyuygm.supabase.cohttps://uqicigxxfgtxxrlyuygm.supabase.co';
+// USE_SUPABASE: true when real credentials are present, false when the URL
+// still contains the placeholder (safe to deploy unconfigured — all writes
+// fall through to localStorage instead of hitting Supabase).
+const USE_SUPABASE = (
+  SUPABASE_URL.startsWith('https://') &&
+  !SUPABASE_URL.includes('YOUR_PROJECT_ID') &&
+  SUPABASE_KEY.length > 20
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -108,7 +112,6 @@ function rowToItem(row) {
     price:      Number(row.price),
     threshold:  Number(row.threshold) || 5,
     soldByKilo: !!row.sold_by_kilo,
-    category:   row.category || '',
 
     id:          row.id,
     name:        row.name,
@@ -132,7 +135,6 @@ function itemToRow(item) {
     price:        Number(item.price),
     threshold:    Number(item.threshold) || 5,
     sold_by_kilo: !!item.soldByKilo,
-    category:     item.category || '',
   };
 }
 

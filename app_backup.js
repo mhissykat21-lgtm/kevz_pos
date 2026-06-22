@@ -320,19 +320,12 @@ async function processCartSale() {
   const now      = new Date();
   const date     = now.toISOString().slice(0, 10);
   const time     = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const billEl  = document.getElementById('billAmount');
-  const billVal = billEl ? parseFloat(billEl.value) : NaN;
-  const subtotal = cart.reduce((a, c) => a + (c.qty * c.price), 0);
-
-  if (payment === 'Cash') {
-    if (!billEl || billEl.value.trim() === '' || isNaN(billVal) || billVal <= 0) {
-      return toast('Please enter the bill amount.', 'error');
+  const billEl = document.getElementById('billAmount');
+  
+  if (!billEl || billEl.value.trim() === '') {
+      return; // Stop here if billAmount is empty
     }
-    if (billVal < subtotal) {
-      return toast(`Bill amount is short by ${fmt(subtotal - billVal)}.`, 'error');
-    }
-  }
-
+    
   // Validate stock
   for (const c of cart) {
     const item = db.items.find(i => i.id === c.itemId);
