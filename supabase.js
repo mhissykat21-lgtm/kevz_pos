@@ -282,8 +282,8 @@ async function initDB() {
 
   try {
     const [itemRows, saleRows] = await Promise.all([
-      sbFetch('inventory?order=created_at.asc&limit=1000'),
-      sbFetch('sales?order=date.asc,created_at.asc&limit=5000'),
+      sbFetch('inventory?order=created_at.asc&limit=10000'),
+      sbFetch('sales?order=date.asc,created_at.asc&limit=50000'),
     ]);
 
     const sbItems = (itemRows || []).map(rowToItem);
